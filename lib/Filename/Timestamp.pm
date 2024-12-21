@@ -5,6 +5,7 @@ use strict;
 use warnings;
 
 use Exporter 'import';
+use Time::Local qw(timelocal_posix);
 
 # AUTHORITY
 # DATE
@@ -12,6 +13,8 @@ use Exporter 'import';
 # VERSION
 
 our @EXPORT_OK = qw(extract_timestamp_from_filename);
+
+our %SPEC;
 
 $SPEC{extract_timestamp_from_filename} = {
     v => 1.1,
@@ -69,49 +72,61 @@ MARKDOWN
     ],
 };
 sub extract_timestamp_from_filename {
-    require Filename::Compressed;
-
     my %args = @_;
 
     my $filename = $args{filename};
-    my $ci = $args{ignore_case} // 1;
 
-    my @compressor_info;
-    while (1) {
-        my $res = Filename::Compressed::check_compressed_filename(
-            filename => $filename, ci => $ci);
-        if ($res) {
-            push @compressor_info, $res;
-            $filename = $res->{uncompressed_filename};
-            next;
+    my $res = {};
+    if ($filename =~ /(\d{4})[_.-](\d{2})[_.-](\d{2})
+                      (?:
+                          [T-]
+                          (\d{2})[_.-](\d{2})[_.-](\d{2})
+                      )?
+                     /x) {
+        $res->{year} = $1+0;
+        $res->{month} = $2+0;
+        $res->{day} = $3+0;
+        if (defined $4) {
+            $res->{hour} = $4+0;
+            $res->{minute} = $5+0;
+            $res->{second} = $6+0;
         } else {
-            last;
+            $res->{hour} = 0;
+            $res->{minute} = 0;
+            $res->{second} = 0;
         }
-    }
-
-    $filename =~ /(.+)(\.\w+)\z/ or return 0;
-    my ($filename_without_suffix, $suffix) = ($1, $2);
-
-    my $spec;
-    if ($ci) {
-        my $suffix_lc = lc($suffix);
-        for (keys %SUFFIXES) {
-            if (lc($_) eq $suffix_lc) {
-                $spec = $SUFFIXES{$_};
-                last;
-            }
+    } elsif ($filename =~ /(\d{4})(\d{2})(\d{2})
+                           (?:
+                               [_-]
+                               (\d{2})(\d{2})(\d{2})
+                           )?
+                          /x) {
+        $res->{year} = $1+0;
+        $res->{month} = $2+0;
+        $res->{day} = $3+0;
+        if (defined $4) {
+            $res->{hour} = $4+0;
+            $res->{minute} = $5+0;
+            $res->{second} = $6+0;
+        } else {
+            $res->{hour} = 0;
+            $res->{minute} = 0;
+            $res->{second} = 0;
         }
     } else {
-        $spec = $SUFFIXES{$suffix};
+        return 0;
     }
-    return 0 unless $spec;
 
-    return {
-        archive_name       => $spec->{name},
-        archive_suffix     => $suffix,
-        filename_without_suffix => $filename_without_suffix,
-        (compressor_info    => \@compressor_info) x !!@compressor_info,
-    };
+    $res->{epoch} = timelocal_posix(
+        $res->{second},
+        $res->{minute},
+        $res->{hour},
+        $res->{day},
+        $res->{month} - 1,
+        $res->{year} - 1900,
+    );
+
+    $res;
 }
 
 1;
