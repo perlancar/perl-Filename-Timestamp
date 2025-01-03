@@ -134,21 +134,17 @@ sub extract_timestamp_from_filename {
 
 =head1 SYNOPSIS
 
- use Filename::Archive qw(check_archive_filename);
- my $res = check_archive_filename(filename => "foo.tar.gz");
+ use Filename::Timestamp qw(extract_timestamp_from_filename);
+ my $res = extract_timestamp_from_filename(filename => "foo.tar.gz");
  if ($res) {
-     printf "File is an archive (type: %s, compressed: %s)\n",
-         $res->{archive_name},
-         $res->{compressor_info} ? "yes":"no";
+     printf "Filename contains timestamp: %s\n", $res->{epoch};
  } else {
-     print "File is not an archive\n";
+     print "Filename does not contain timestamp\n";
  }
 
 =head1 DESCRIPTION
 
 
 =head1 SEE ALSO
-
-L<Filename::Compressed>
 
 =cut
