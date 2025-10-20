@@ -5,7 +5,7 @@ use strict;
 use warnings;
 
 use Exporter 'import';
-use Time::Local qw(timelocal_posix);
+use Time::Local qw(timelocal_posix timegm_posix);
 
 # AUTHORITY
 # DATE
@@ -21,6 +21,11 @@ $SPEC{extract_timestamp_from_filename} = {
     summary => 'Extract date/timestamp from filename, if any',
     description => <<'MARKDOWN',
 
+*Handling of timezone.* If timestmap contains timezone indication, e.g. `+0700`,
+will return `tz_offset` key in the result hash as well as `epoch`. Otherwise,
+will return `tz` key in the result hash with the value of `floating` and
+`epoch_local` calculated using <pm:Time::Local>'s `timelocal_posix` as well as
+`epoch_utc` calculated using `timegm_posix`.
 
 MARKDOWN
     args => {
@@ -77,10 +82,13 @@ sub extract_timestamp_from_filename {
     my $filename = $args{filename};
 
     my $res = {};
-    if ($filename =~ /(\d{4})[_.-](\d{2})[_.-](\d{2})
+    if ($filename =~ /(\d{4})[_.-](\d{2})[_.-](\d{2})      # 1 (year), 2 (mon), 3 (day)
                       (?:
                           [T-]
-                          (\d{2})[_.-](\d{2})[_.-](\d{2})
+                          (\d{2})[_.-](\d{2})[_.-](\d{2})  # 4 (hour), 5 (minute), 6 (second)
+                          (?:
+                              ([+-])(\d{2})[_-]?(\d{2})    # 7 (timestamp sign), 8 (timestamp hour), 9 (timestamp minute)
+                          )?
                       )?
                      /x) {
         $res->{year} = $1+0;
@@ -95,10 +103,16 @@ sub extract_timestamp_from_filename {
             $res->{minute} = 0;
             $res->{second} = 0;
         }
-    } elsif ($filename =~ /(\d{4})(\d{2})(\d{2})
+        if ($7) {
+            $res->{tz_offset} = ($7 eq '+' ? 1:-1) * $8*3600 + $9*60;
+        }
+    } elsif ($filename =~ /(\d{4})(\d{2})(\d{2})                # 1 (year), 2 (mon), 3 (day)
                            (?:
                                [_-]
-                               (\d{2})(\d{2})(\d{2})
+                               (\d{2})(\d{2})(\d{2})            # 4 (hour), 5 (min), 6 (second)
+                               (?:
+                                   ([+-])(\d{2})[_-]?(\d{2})    # 7 (timestamp sign), 8 (timestamp hour), 9 (timestamp minute)
+                               )?
                            )?
                           /x) {
         $res->{year} = $1+0;
@@ -113,18 +127,41 @@ sub extract_timestamp_from_filename {
             $res->{minute} = 0;
             $res->{second} = 0;
         }
+        if ($7) {
+            $res->{tz_offset} = ($7 eq '+' ? 1:-1) * $8*3600 + $9*60;
+        }
     } else {
         return 0;
     }
 
-    $res->{epoch} = timelocal_posix(
-        $res->{second},
-        $res->{minute},
-        $res->{hour},
-        $res->{day},
-        $res->{month} - 1,
-        $res->{year} - 1900,
-    );
+    if (defined $res->{tz_offset}) {
+        $res->{epoch} = timegm_posix(
+            $res->{second},
+            $res->{minute},
+            $res->{hour},
+            $res->{day},
+            $res->{month} - 1,
+            $res->{year} - 1900,
+        ) + $res->{tz_offset};
+    } else {
+        $res->{epoch_local} = $res->{epoch} = timelocal_posix(
+            $res->{second},
+            $res->{minute},
+            $res->{hour},
+            $res->{day},
+            $res->{month} - 1,
+            $res->{year} - 1900,
+        );
+        $res->{tz} = 'floating';
+        $res->{epoch_utc} = timegm_posix(
+            $res->{second},
+            $res->{minute},
+            $res->{hour},
+            $res->{day},
+            $res->{month} - 1,
+            $res->{year} - 1900,
+        );
+    }
 
     $res;
 }
