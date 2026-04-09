@@ -163,6 +163,10 @@ sub extract_timestamp_from_filename {
         );
     }
 
+    if (defined $res->{year} && defined $res->{month} && defined $res->{day}) {
+        $res->{ymd} = sprintf("%04d%02d%02d", $res->{year}, $res->{month}, $res->{day});
+    }
+
     $res;
 }
 
